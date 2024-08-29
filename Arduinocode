@@ -1,0 +1,92 @@
+#include <SoftwareSerial.h>
+#include <Servo.h>
+#include <ESP8266WiFi.h>
+
+// Replace with your Pushingbox API key
+const char* API_KEY = "v76110ADFED66702";
+
+// Replace with your WiFi credentials
+const char* WIFI_SSID = "SHAUN 1005";
+const char* WIFI_PASSWORD = "12345678";
+
+// Pin definitions
+const int SOUND_SENSOR_PIN = A0;
+const int SERVO_PIN = D1;
+
+// Sound sensor parameters
+const int SOUND_THRESHOLD = 500;
+
+// WiFi client and Pushingbox URL
+WiFiClient client;
+const char* PUSHINGBOX_URL = "api.pushingbox.com";
+
+Servo servoTest;
+
+void setup() {
+    // Start serial communication for debugging purposes
+    Serial.begin(115200);
+
+    // Attach servo to pin
+    servoTest.attach(SERVO_PIN);
+
+    // Connect to WiFi network
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.println("Connecting to WiFi...");
+    }
+    Serial.println("Connected to WiFi");
+
+    // Initialize sound sensor
+    pinMode(SOUND_SENSOR_PIN, INPUT);
+}
+
+void loop() {
+    // Read sound sensor value
+    int soundValue = analogRead(SOUND_SENSOR_PIN);
+
+    // If sound value is above threshold, open servo and send notification
+    if (soundValue > SOUND_THRESHOLD) {
+        Serial.println("Sound detected!");
+
+        for (int i = 0; i <= 180; i += 10) {
+            servoTest.write(i);
+            delay(30);
+        }
+
+        for (int i = 180; i >= 0; i -= 10) {
+            servoTest.write(i);
+            delay(30);
+        }
+
+        sendNotification();
+        delay(10000); // Wait 10 seconds before next check
+    }
+}
+
+void sendNotification() {
+    // Build Pushingbox API request
+    String request = "GET /pushingbox?devid=" + String(API_KEY) + " HTTP/1.1\r\n";
+    request += "Host: " + String(PUSHINGBOX_URL) + "\r\n";
+    request += "User-Agent: ESP8266/1.0\r\n";
+    request += "Connection: close\r\n\r\n";
+
+    // Send API request to Pushingbox
+    client.connect(PUSHINGBOX_URL, 80);
+    client.print(request);
+
+    // Wait for response
+    while (client.connected() && !client.available()) delay(1);
+
+    // Read response
+    while (client.connected() || client.available()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") {
+            Serial.println("Notification sent!");
+            break;
+        }
+    }
+
+    // Disconnect from server
+    client.stop();
+}
